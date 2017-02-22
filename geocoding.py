@@ -25,4 +25,3 @@ for line in data:
 
 with open(output, "w") as fp:
     json.dump(nodes, fp) 
-    json.dump("\n", fp)
