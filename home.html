@@ -3,8 +3,8 @@
   <head>
     <style>
        #map {
-        height: 400px;
-        width: 100%;
+            height: 735px;
+            width: 100%;
        }
     </style>
   </head>
@@ -14,12 +14,11 @@
     <script>
       function initMap() {
           var markers = [];
+          var map;
           $.getJSON('./geocoded.json', function(data) {
-              console.log(data[1]["geocode"][0]);
               var uluru = {lat: data[120]["geocode"][0], lng: data[120]["geocode"][1]};
-              // var uluru = {lat: 39.114053, lng: -94.6274636};
-              var map = new google.maps.Map(document.getElementById('map'), {
-                  zoom: 4,
+              map = new google.maps.Map(document.getElementById('map'), {
+                  zoom: 5,
                   center: uluru
               });
               jQuery.each(data, function(i, val) {
@@ -30,7 +29,21 @@
                   });
                   markers.push(marker); 
               });
-              console.log(markers);
+              $.get('./InterTubes-Dataset/links.txt', function(data) {
+                  data = data.split("\n");
+                  jQuery.each(data, function(i, val) {
+                      if(data[i]) {
+                          var line = data[i].split(",");
+                          line = [parseInt(line[0]), parseInt(line[1])];
+                          var link = [markers[line[0]].getPosition(), markers[line[1]].getPosition()];
+                          var flightPath = new google.maps.Polyline({
+                              path: link,
+                              strokeColor: '#0000FF'
+                          });
+                          flightPath.setMap(map);
+                      }
+                  });
+              });
           });
       }
     </script>
