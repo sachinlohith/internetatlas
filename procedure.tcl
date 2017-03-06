@@ -3,7 +3,6 @@ source tb_compat.tcl
 
 set magi_start "sudo python /share/magi/current/magi_bootstrap.py"
 
-$ns node-config -satNodeType terminal
 
 # {u'geocode': [32.4487364, -99.73314390000002], u'location': u'Abilene, Texas'}
 set n1 [$ns node]
