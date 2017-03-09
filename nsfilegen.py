@@ -7,19 +7,20 @@ import json
 import argparse
 import sys
 
-parser = argparse.ArgumentParser(description="NS file generator; uses node co-ordinates stored in a JSON file")
+parser = argparse.ArgumentParser(description="NS file generator; uses node co-ordinates stored in a JSON file", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-i', '--infile', help="JSON file storing node co-ordinates", type=str, default='geocoded.json')
 parser.add_argument('-w', '--west', help="Filter nodes to the west of a particular longitude", type=float, default=180.0)
 parser.add_argument('-e', '--east', help="Filter nodes to the east of a particular longitude", type=float, default=-180.0)
 parser.add_argument('-n', '--north', help="Filter nodes to the north of a particular latitude", type=float, default=-90.0)
 parser.add_argument('-s', '--south', help="Filter nodes to the south of a particular latitude", type=float, default=90.0)
 parser.add_argument('-o', '--outfile', help="Place TCL output in the file specified", type=str, default='procedure.tcl')
-parser.add_argument('-r', '--range', metavar=('start', 'end'), help="Inclusive range of nodes to add in the NS file: [start, end]", default=[1, 273], type=int, nargs=2)
+parser.add_argument('-r', '--range', metavar=('START', 'END'), help="Inclusive range of nodes to add in the NS file: [start, end]", default=[1, 273], type=int, nargs=2)
+parser.add_argument('-l', '--linkfile', help="Link file containing information about the nodes to be connected; stored in [node1 node2] format", type=str, default="InterTubes-Dataset/links.txt")
 
 args = vars(parser.parse_args(sys.argv[1:]))
 
 jsonFile = args['infile']
-linksFile = "InterTubes-Dataset/links.txt"
+linksFile = args['linkfile']
 nsFile = args['outfile']
 west = args['west']
 east = args['east']
