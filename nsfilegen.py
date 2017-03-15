@@ -14,7 +14,8 @@ parser.add_argument('-e', '--east', help="Filter nodes to the east of a particul
 parser.add_argument('-n', '--north', help="Filter nodes to the north of a particular latitude", type=float, default=-90.0)
 parser.add_argument('-s', '--south', help="Filter nodes to the south of a particular latitude", type=float, default=90.0)
 parser.add_argument('-o', '--outfile', help="Place TCL output in the file specified", type=str, default='procedure.tcl')
-parser.add_argument('-r', '--range', metavar=('START', 'END'), help="Inclusive range of nodes to add in the NS file: [start, end]", default=[1, 273], type=int, nargs=2)
+parser.add_argument('-b', '--begin', help="Index of starting node to be considered in NS file", default=1, type=int)
+parser.add_argument('-d', '--end', help="Index of ending node to be considered in NS file", default=273, type=int)
 parser.add_argument('-l', '--linkfile', help="Link file containing information about the nodes to be connected; stored in [node1 node2] format", type=str, default="InterTubes-Dataset/links.txt")
 
 args = vars(parser.parse_args(sys.argv[1:]))
@@ -26,7 +27,8 @@ west = args['west']
 east = args['east']
 north = args['north']
 south = args['south']
-startNode, endNode = args['range']
+startNode = args['begin']
+endNode = args['end']
 
 try:
     assert north >= -90.0 and north <= 90.0 and \

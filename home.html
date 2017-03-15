@@ -9,6 +9,7 @@
     </style>
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC6S8qL6b6A6IIAIIQaVgUJF7Bk9iV0JXc"> </script>
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+    <script type="text/javascript" src="./FileSaver.js"></script>
   </head>
   <body>
     <h3>Internet Atlas</h3>
@@ -19,10 +20,63 @@
         South : <input type=number step=any id="south"> <br>
         Start : <input type=number id="start"> <br>
         End : <input type=number id="end"> <br>
-        <input type=submit value="Submit"> <br>
+        <input type=submit value="Generate MAP"> <br>
+    </form>
+    <form action="javascript:generateNS()">
+        <input type=submit value="Generate NS File"> <br>
     </form>
     <div id="map"></div>
     <script>
+        function generateNS() {
+            initMap();
+            var markers = {};
+            var west = document.getElementById("west").value ? document.getElementById("west").value : 180.0;
+            var east = document.getElementById("east").value ? document.getElementById("east").value : -180.0;
+            var north = document.getElementById("north").value ? document.getElementById("north").value : -90.0;
+            var south = document.getElementById("south").value ? document.getElementById("south").value : 90.0;
+            var start = document.getElementById("start").value ? document.getElementById("start").value : 1;
+            var end = document.getElementById("end").value ? document.getElementById("end").value : 273;
+            var nsData = "";
+            var newLine = "\n";
+            nsData += "set ns [new Simulator]" + newLine;
+            nsData += "source tb_compat.tcl" + newLine;
+            nsData += newLine;
+            nsData += "set magi_start \"sudo python /share/magi/current/magi_bootstrap.py\"" + newLine;
+            nsData += newLine;
+            nsData += newLine;
+            $.getJSON('./geocoded.json', function(data) {
+                for(i = start; i <= end; i++) {
+                    var lat = data[i]["geocode"][0];
+                    var lng = data[i]["geocode"][1];
+                    if(lat > north && lat < south && lng < west && lng > east ) {
+                        nsData += "# " + JSON.stringify(data[i]) + newLine;
+                        nsData += "set n" + i.toString() + "[$ns node]" + newLine;
+                        nsData += "set lat " + lat.toString() + newLine;
+                        nsData += "set lon " + lng.toString() + newLine;
+                        nsData += "$n" + i.toString() + " set-position $lat $lon" + newLine;
+                        nsData += "tb-set-node-startcmd $n" + i.toString() + " \"$magi_start\"" + newLine;
+                        nsData += newLine;
+                        markers[i] = true;
+                    }
+                }
+                $.get('./InterTubes-Dataset/links.txt', function(data) {
+                    data = data.split("\n");
+                    jQuery.each(data, function(i, val) {
+                        if(data[i]) {
+                            var line = data[i].split(",");
+                            if(line[0] in markers && line[1] in markers) {
+                                nsData += "# Link " + (i+1).toString() + ": Node " + line[0] + " ---> Node " + line[1] + newLine;
+                                nsData += "set link" + (i+1).toString() + " [$ns duplex-link $n" + line[0] + " $n" + line[1] + " 100Mbps 0ms DropTail]" + newLine;
+                                nsData += newLine;
+                            }
+                        }
+                    });
+                    var blob = new Blob([nsData], {type: "text/plain;charset=utf-8"});
+                    saveAs(blob, "procedure.tcl");
+                });
+            });
+        }
+
         function initMap() {
             var markers = {};
             var map;
@@ -38,21 +92,19 @@
                     zoom: 5,
                     center: uluru
                 });
-                jQuery.each(data, function(i, val) {
-                    if(i >= start && i <= end) {
-                        var lat = data[i]["geocode"][0];
-                        var lng = data[i]["geocode"][1];
-                        if(lat > north && lat < south && lng < west && lng > east ) {
-                            console.log("adding to markers");
-                            uluru = {lat, lng};
-                            var marker = new google.maps.Marker({
-                                position: uluru,
-                                map: map
-                            });
-                            markers[i] = marker;
-                        }
+                for(i = start; i <= end; i++) {
+                    var lat = data[i]["geocode"][0];
+                    var lng = data[i]["geocode"][1];
+                    if(lat > north && lat < south && lng < west && lng > east ) {
+                        // console.log("adding to markers");
+                        uluru = {lat, lng};
+                        var marker = new google.maps.Marker({
+                            position: uluru,
+                            map: map
+                        });
+                        markers[i] = marker;
                     }
-                });
+                }
                 $.get('./InterTubes-Dataset/links.txt', function(data) {
                     data = data.split("\n");
                     jQuery.each(data, function(i, val) {
