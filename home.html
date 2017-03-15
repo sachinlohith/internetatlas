@@ -27,72 +27,39 @@
     </form>
     <div id="map"></div>
     <script>
-        function generateNS() {
-            initMap();
-            var markers = {};
-            var west = document.getElementById("west").value ? document.getElementById("west").value : 180.0;
-            var east = document.getElementById("east").value ? document.getElementById("east").value : -180.0;
-            var north = document.getElementById("north").value ? document.getElementById("north").value : -90.0;
-            var south = document.getElementById("south").value ? document.getElementById("south").value : 90.0;
-            var start = document.getElementById("start").value ? document.getElementById("start").value : 1;
-            var end = document.getElementById("end").value ? document.getElementById("end").value : 273;
-            var nsData = "";
-            var newLine = "\n";
-            nsData += "set ns [new Simulator]" + newLine;
-            nsData += "source tb_compat.tcl" + newLine;
-            nsData += newLine;
-            nsData += "set magi_start \"sudo python /share/magi/current/magi_bootstrap.py\"" + newLine;
-            nsData += newLine;
-            nsData += newLine;
-            $.getJSON('./geocoded.json', function(data) {
-                for(i = start; i <= end; i++) {
-                    var lat = data[i]["geocode"][0];
-                    var lng = data[i]["geocode"][1];
-                    if(lat > north && lat < south && lng < west && lng > east ) {
-                        nsData += "# " + JSON.stringify(data[i]) + newLine;
-                        nsData += "set n" + i.toString() + "[$ns node]" + newLine;
-                        nsData += "set lat " + lat.toString() + newLine;
-                        nsData += "set lon " + lng.toString() + newLine;
-                        nsData += "$n" + i.toString() + " set-position $lat $lon" + newLine;
-                        nsData += "tb-set-node-startcmd $n" + i.toString() + " \"$magi_start\"" + newLine;
-                        nsData += newLine;
-                        markers[i] = true;
-                    }
-                }
-                $.get('./InterTubes-Dataset/links.txt', function(data) {
-                    data = data.split("\n");
-                    jQuery.each(data, function(i, val) {
-                        if(data[i]) {
-                            var line = data[i].split(",");
-                            if(line[0] in markers && line[1] in markers) {
-                                nsData += "# Link " + (i+1).toString() + ": Node " + line[0] + " ---> Node " + line[1] + newLine;
-                                nsData += "set link" + (i+1).toString() + " [$ns duplex-link $n" + line[0] + " $n" + line[1] + " 100Mbps 0ms DropTail]" + newLine;
-                                nsData += newLine;
-                            }
-                        }
-                    });
-                    var blob = new Blob([nsData], {type: "text/plain;charset=utf-8"});
-                    saveAs(blob, "procedure.tcl");
-                });
-            });
-        }
-
         function initMap() {
             var markers = {};
             var map;
-            var west = document.getElementById("west").value ? document.getElementById("west").value : 180.0;
-            var east = document.getElementById("east").value ? document.getElementById("east").value : -180.0;
-            var north = document.getElementById("north").value ? document.getElementById("north").value : -90.0;
-            var south = document.getElementById("south").value ? document.getElementById("south").value : 90.0;
-            var start = document.getElementById("start").value ? document.getElementById("start").value : 1;
-            var end = document.getElementById("end").value ? document.getElementById("end").value : 273;
+            var west = document.getElementById("west").value ? +document.getElementById("west").value : 180.0;
+            var east = document.getElementById("east").value ? +document.getElementById("east").value : -180.0;
+            var north = document.getElementById("north").value ? +document.getElementById("north").value : -90.0;
+            var south = document.getElementById("south").value ? +document.getElementById("south").value : 90.0;
+            var start = document.getElementById("start").value ? +document.getElementById("start").value : 1;
+            var fin = document.getElementById("end").value ? +document.getElementById("end").value : 273;
+            try {
+                if(!(north >= -90.0 && north <= 90.0 && south >= -90.0 && south <= 90.0 && west <= 180.0 && west >= -180.0 && east <= 180.0 && east >= -180.0)) {
+                    throw "co-ordinate error";
+                }
+            } catch (err) {
+                alert("Co-ordinates must be within earth's boundaries");
+                return;
+            }
+            try {
+                if(!(start >= 1 && start <= 273 && fin >= 1 && fin <= 273 && start <= fin)) {
+                    throw "Index error";
+                }
+            } catch (err) {
+                alert("Indices must be within [1, 273]; starting index must be less than or equal to ending index");
+                return;
+            }
             $.getJSON('./geocoded.json', function(data) {
                 var uluru = {lat: data[120]["geocode"][0], lng: data[120]["geocode"][1]};
                 map = new google.maps.Map(document.getElementById('map'), {
                     zoom: 5,
                     center: uluru
                 });
-                for(i = start; i <= end; i++) {
+                for(var i = start; i <= fin; i++) {
+                    console.log("added " + i.toString() + " to markers");
                     var lat = data[i]["geocode"][0];
                     var lng = data[i]["geocode"][1];
                     if(lat > north && lat < south && lng < west && lng > east ) {
@@ -121,6 +88,72 @@
                             }
                         }
                     });
+                });
+            });
+        }
+
+        function generateNS() {
+            initMap();
+            var markers = {};
+            var west = document.getElementById("west").value ? +document.getElementById("west").value : 180.0;
+            var east = document.getElementById("east").value ? +document.getElementById("east").value : -180.0;
+            var north = document.getElementById("north").value ? +document.getElementById("north").value : -90.0;
+            var south = document.getElementById("south").value ? +document.getElementById("south").value : 90.0;
+            var start = document.getElementById("start").value ? +document.getElementById("start").value : 1;
+            var fin = document.getElementById("end").value ? +document.getElementById("end").value : 273;
+            try {
+                if(!(north >= -90.0 && north <= 90.0 && south >= -90.0 && south <= 90.0 && west <= 180.0 && west >= -180.0 && east <= 180.0 && east >= -180.0)) {
+                    throw "co-ordinate error";
+                }
+            } catch (err) {
+                alert("Co-ordinates must be within earth's boundaries");
+                return;
+            }
+            try {
+                if(!(start >= 1 && start <= 273 && fin >= 1 && fin <= 273 && start <= fin)) {
+                    throw "Index error";
+                }
+            } catch (err) {
+                alert("Indices must be within [1, 273]; starting index must be less than or equal to ending index");
+                return;
+            }
+            var nsData = "";
+            var newLine = "\n";
+            nsData += "set ns [new Simulator]" + newLine;
+            nsData += "source tb_compat.tcl" + newLine;
+            nsData += newLine;
+            nsData += "set magi_start \"sudo python /share/magi/current/magi_bootstrap.py\"" + newLine;
+            nsData += newLine;
+            nsData += newLine;
+            $.getJSON('./geocoded.json', function(data) {
+                for(var i = start; i <= fin; i++) {
+                    var lat = data[i]["geocode"][0];
+                    var lng = data[i]["geocode"][1];
+                    if(lat > north && lat < south && lng < west && lng > east ) {
+                        nsData += "# " + JSON.stringify(data[i]) + newLine;
+                        nsData += "set n" + i.toString() + "[$ns node]" + newLine;
+                        nsData += "set lat " + lat.toString() + newLine;
+                        nsData += "set lon " + lng.toString() + newLine;
+                        nsData += "$n" + i.toString() + " set-position $lat $lon" + newLine;
+                        nsData += "tb-set-node-startcmd $n" + i.toString() + " \"$magi_start\"" + newLine;
+                        nsData += newLine;
+                        markers[i] = true;
+                    }
+                }
+                $.get('./InterTubes-Dataset/links.txt', function(data) {
+                    data = data.split("\n");
+                    jQuery.each(data, function(i, val) {
+                        if(data[i]) {
+                            var line = data[i].split(",");
+                            if(line[0] in markers && line[1] in markers) {
+                                nsData += "# Link " + (i+1).toString() + ": Node " + line[0] + " ---> Node " + line[1] + newLine;
+                                nsData += "set link" + (i+1).toString() + " [$ns duplex-link $n" + line[0] + " $n" + line[1] + " 100Mbps 0ms DropTail]" + newLine;
+                                nsData += newLine;
+                            }
+                        }
+                    });
+                    var blob = new Blob([nsData], {type: "text/plain;charset=utf-8"});
+                    saveAs(blob, "procedure.tcl");
                 });
             });
         }
