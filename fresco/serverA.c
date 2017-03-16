@@ -14,7 +14,7 @@
 #define PORT 25080 //port with TCP for server 0 
 #define SLEEP_TIME 10 //sleep time for server 0: 1s
 #define START_TIME 1
-#define END_TIME 100
+#define END_TIME 1200
 #define ERR_EXIT(m) \
 	do \
 	{ \
@@ -33,10 +33,12 @@ int* ack = NULL;
 int sock0 = -1;
 char* MSG = "\0";
 char* DATA = "This is a data string\0";
-double **X = NULL;
 double **A = NULL;
 double **B = NULL;
-double *K = NULL;
+double **K = NULL;
+double *U = NULL;
+double *X = NULL;
+int *peers = NULL;
 /****************************************************
                 function declaration
 ****************************************************/
@@ -48,34 +50,112 @@ void connectToServers(int* matrix,pthread_t* getThread);
 int checkACK();
 char* concat(char *s1,char *s2);
 void connectToServer0();
-double computeU(double *x);
+double computeU(void);
+void computeX(void);
 void readConfig();
-void readK();
+int checkPeerAck();
+char *prune(char *recvbuf, int node);
+double **MatrixMultiply(double **A, double **B, int row1, int col1, int row2, int col2);
+double **MatrixAdd(double **A, double **B, int row1, int col1, int row2, int col2);
+double **MatrixTranspose(double **A, int row, int col);
 
-void readConfig() {
-        FILE *AFile = fopen("A", "r");
-        FILE *BFile = fopen("B", "r");
-        FILE *XFile = fopen("xinit", "r"); 
-        A = (double **) malloc(nodeAmount*13*sizeof(double *));
-        B = (double **) malloc(nodeAmount*13*sizeof(double *));
-        X = (double **) malloc(nodeAmount*sizeof(double *));
-        for(int i = 0; i < nodeAmount; i++) {
-                X[i] = malloc(13*sizeof(double));
+double **MatrixTranspose(double **A, int row, int col) {
+        double **result = NULL;
+        result = (double **) malloc(col*sizeof(double *));
+        for(int i = 0; i < col; i++) {
+                result[i] = (double *) malloc(row*sizeof(double));
         }
-        for(int i = 0; i < nodeAmount*13; i++) {
-                A[i] = malloc(nodeAmount*13*sizeof(double));
-                B[i] = malloc(nodeAmount*sizeof(double));
-        }
-        for(int i = 0; i < nodeAmount*13; i++) {
-                for(int j = 0; j < nodeAmount*13; j++) {
-                        fscanf(AFile, "%lf", &A[i][j]);
-                        printf("%lf ", A[i][j]);
+        for(int i = 0; i < row; i++) {
+                for(int j = 0; j < col; j++) {
+                    result[j][i] = A[i][j];
                 }
-                printf("\n");
         }
+        return result;
 }
 
-void readK() {
+double **MatrixMultiply(double **A, double **B, int row1, int col1, int row2, int col2) {
+        if(col1 != row2) {
+                printf("Incompatible matrices\n");
+                exit(1);
+        }
+        double **result = NULL;
+        result = (double **) malloc(row1*sizeof(double *));
+        for(int i = 0; i < row1; i++) {
+                result[i] = (double *) malloc(col2*sizeof(double));
+        }
+        for(int i = 0; i < row1; i++) {
+                for(int j = 0; j < col2; j++) {
+                        for(int k = 0; k < col1; k++) {
+                                result[i][j] += A[i][k] * B[k][j];
+                        }
+                }
+        }
+        return result;
+}
+
+double **MatrixAdd(double **A, double **B, int row1, int col1, int row2, int col2) {
+        if(row1 != row2 || col1 != col2) {
+                printf("Incompatible matrices\n");
+                exit(1);
+        }
+        double **result = NULL;
+        result = (double **) malloc(row1*sizeof(double *));
+        for(int i = 0; i < row1; i++) {
+                result[i] = (double *) malloc(col1*sizeof(double));
+        }
+        for(int i = 0; i < row1; i++) {
+                for(int j = 0; j < col1; j++) {
+                        result[i][j] = A[i][j] + B[i][j];
+                }
+        }
+        return result;
+}
+
+void readConfig() {
+        if(NODE_NUMBER != 0) {
+                FILE *KFile = fopen("K", "r");
+                K = (double **) malloc(nodeAmount*sizeof(double *));
+                X = (double *) malloc(nodeAmount*13*sizeof(double));
+                memset(X, 0, nodeAmount*13*sizeof(double));
+                for(int i = 0; i < nodeAmount; i++) {
+                        K[i] = (double *) malloc(nodeAmount*13*sizeof(double));
+                }
+                for(int i = 0; i < nodeAmount; i++) {
+                        for(int j = 0; j < nodeAmount*13; j++) {    
+                                fscanf(KFile, "%lf", &K[i][j]);
+                        }
+                }
+                fclose(KFile);
+        } else {
+                FILE *AFile = fopen("A", "r");
+                FILE *BFile = fopen("B", "r");
+                FILE *XFile = fopen("xinit", "r"); 
+                X = (double *) malloc(nodeAmount*13*sizeof(double));
+                A = (double **) malloc(nodeAmount*13*sizeof(double *));
+                B = (double **) malloc(nodeAmount*13*sizeof(double *));
+                U = (double *) malloc(nodeAmount*sizeof(double));
+                memset(U, 0, nodeAmount);
+                for(int i = 0; i < nodeAmount*13; i++) {
+                        A[i] = (double *) malloc(nodeAmount*13*sizeof(double));
+                        B[i] = (double *) malloc(nodeAmount*sizeof(double));
+                }
+                for(int i = 0; i < nodeAmount*13; i++) {
+                        for(int j = 0; j < nodeAmount*13; j++) {
+                                fscanf(AFile, "%lf", &A[i][j]);
+                        }
+                }
+                for(int i = 0; i < nodeAmount*13; i++) { 
+                        for(int j = 0; j < nodeAmount; j++) {
+                                fscanf(BFile, "%lf", &B[i][j]);
+                        }
+                }
+                for(int i = 0; i < nodeAmount*13; i++) {
+                        fscanf(XFile, "%lf", &X[i]);
+                } 
+                fclose(AFile);
+                fclose(BFile);
+                fclose(XFile);
+        }
 }
 
 static
@@ -156,11 +236,59 @@ void sendSyncMsg(char* msg) {
 	}
 }
 
+int checkPeerAck() {
+        for(int i = 0; i < nodeAmount; i++) {
+                if(peers[i] != 1) { // haven't received sync message from peer i
+                    return 1;
+                }
+        }
+        return 0;
+}
+
+char *prune(char *recvbuf, int node) {
+        int i = 0;
+        char *result = NULL, *token = NULL, *string = strdup(recvbuf);
+        if(node == NODE_NUMBER) {
+                token = strsep(&string, ",");
+                result = concat(token, "");
+                while((token = strsep(&string, ",")) != NULL) {
+                        if(i / 13 == (node-1)) {
+                                result = concat(result, ",");
+                                result = concat(result, token);
+                                sscanf(token, "%lf", &X[i]);
+                                i++;
+                                break;
+                        }
+                        i++;
+                }
+                int j = 1;
+                while((token = strsep(&string, ",")) != NULL && j < 13) {
+                        result = concat(result, ",");
+                        result = concat(result, token); 
+                        sscanf(token, "%lf", &X[i]);
+                        i++;
+                        j++;
+                }
+                return result;
+        } else {
+                token = strsep(&string, ",");
+                i = (node-1)*13;
+                while((token = strsep(&string, ",")) != NULL) {
+                        sscanf(token, "%lf", &X[i]);
+                        i++;
+                }
+                return NULL;
+        }
+}
+
 void *getInfo(void *arg){
 	int node = (int)arg;
 	printf("getInfo thread created: waitting for message from server %d\n",node);
 	
 	int sock = -1;
+        if(node == 0) {
+            peers = (int *) malloc(nodeAmount*sizeof(int));
+        }
 	if(node == 0)  { sock = sock0; }
 	else { sock = socketArr[node-1]; }
 	
@@ -175,12 +303,24 @@ void *getInfo(void *arg){
 		  
 		  if(NODE_NUMBER == 0) {
 		  	ack[node - 1] = 1; //received ack from server [node]
+                        sscanf(recvbuf, "%lf", &U[node-1]);
 		  } else {
 		  	if(node == 0) {
-				char* reply = concat(recvbuf,"");
+                                for(int i = 0; i < nodeAmount; i++) {
+                                        if(matrix[i] == 0) {
+                                                peers[i] = 1;
+                                        } else {
+                                                peers[i] = 0;
+                                        }
+                                }
+				// char* reply = concat(recvbuf,"");
+                                char *reply = prune(recvbuf, NODE_NUMBER);
 				sendSyncMsg(reply);
 				// free(reply);
-                                snprintf(reply, 20, "%lf", computeU(X[NODE_NUMBER]));
+                                while(checkPeerAck() != 0) {
+                                        usleep(1000);
+                                }
+                                snprintf(reply, 20, "%lf", computeU());
 				if( send(sock,reply,strlen(reply),0) <=0 ) {
 					printf("Cannot send message to server %d!\n",node);
 					sock0 = -1;
@@ -190,18 +330,28 @@ void *getInfo(void *arg){
 					printf("Replied message to server %d: %s\n",node,reply);	
 				}
 				free(reply);
-			}
-		  }
-		
+                        } else {
+                                free(prune(recvbuf, node));
+                                peers[node-1] = 1;
+                        }
+		  }	
 		}
-		memset(recvbuf,0,sizeof(recvbuf));	
+		memset(recvbuf,0,sizeof(recvbuf));
 	}
 
 	printf("Disconnected with server %d\n",node);
+        if(node == 0) {
+            free(peers);
+        }
 }
 
-double computeU(double *x) {
-    return 0;
+double computeU(void) {
+        double **XTranspose = MatrixTranspose(&X, 1, nodeAmount*13);
+        double **result = MatrixMultiply(&K[NODE_NUMBER-1], XTranspose, 1, nodeAmount*13, nodeAmount*13, 1);
+        free(XTranspose);
+        double resultVal = result[0][0];
+        free(result);
+        return resultVal;
 }
 
 void *listenning(void *arg) {
@@ -226,11 +376,32 @@ void *listenning(void *arg) {
 	}
 }
 
+void computeX(void) {
+        double **XTranspose = MatrixTranspose(&X, 1, nodeAmount*13);
+        double **temp1 = MatrixMultiply(A, XTranspose, nodeAmount*13, nodeAmount*13, nodeAmount*13, 1);
+        double **UTranspose = MatrixTranspose(&U, 1, nodeAmount);
+        double **temp2 = MatrixMultiply(B, UTranspose, nodeAmount*13, nodeAmount, nodeAmount, 1);
+        free(XTranspose);
+        free(UTranspose);
+        double **XTemp = MatrixAdd(temp1, temp2, nodeAmount*13, 1, nodeAmount*13, 1);
+        double **XTempTranspose = MatrixTranspose(XTemp, nodeAmount*13, 1);
+        free(XTemp);
+        free(X);
+        free(temp1);
+        free(temp2);
+        X = XTempTranspose[0];
+        printf("Recomputed X Values: \n");
+        for(int i = 0; i < nodeAmount*13; i++) {
+                printf("%lf ", X[i]);
+        }
+        printf("\n");
+}
+
 void *syncStart(void *arg) {
 	int t = START_TIME;
 	char buff[12] = {0};
 	char* c = "";
-        char* x_vals[13];
+        char* x_vals[nodeAmount*13];
 	int i = 0;
 	while(t <= END_TIME) {
 		for(i = 0; i < nodeAmount; i++) {
@@ -239,10 +410,10 @@ void *syncStart(void *arg) {
 		//itoa(t++,buff,10);
 		snprintf(buff,12,"%d",t++);
                 char *msg = concat(c, buff);
-                for(int i = 0; i < 13; i++) {
+                for(int i = 0; i < nodeAmount*13; i++) {
                     x_vals[i] = malloc(20*sizeof(char));
                     msg = concat(msg, ",");
-                    snprintf(x_vals[i], 20, "%lf", X[NODE_NUMBER][i]);
+                    snprintf(x_vals[i], 20, "%lf", X[i]);
                     msg = concat(msg, x_vals[i]);
                     free(x_vals[i]);
                     x_vals[i] = NULL;
@@ -254,6 +425,9 @@ void *syncStart(void *arg) {
 		while( checkACK() != 0 ) {
 			usleep(1000);
 		}
+                if(t > 2) {
+                        computeX();
+                }
 		printf("Received all ACKs of [%d]\nSleeping...\n",t-1);
 		sleep(SLEEP_TIME);
 	}
@@ -297,18 +471,15 @@ int main(int argc, char* argv[]){
 	pthread_create(&listenThread, 0, listenning, 0);
 	
 	/*connect to other exist servers*/
+        // Read configuration from files
+        readConfig();
 	if(NODE_NUMBER != 0) {
-                // Read matrix K from respective file
-                readK();
       		pthread_t getThread[nodeAmount];
  	  	memset(getThread,0, nodeAmount * sizeof(pthread_t));
 		connectToServers(matrix,getThread);
 		printf("Finished connecting to others!\n");
 		connectToServer0();
-	}
-	else {
-                // Read matrices A, B, and x_init from respective files
-                readConfig();
+	} else {
 		pthread_create(&syncThread,0,syncStart,0);
 	}
 	
