@@ -39,8 +39,10 @@ double **A = NULL;
 double **B = NULL;
 double **K = NULL;
 double *U = NULL;
-double *X = NULL;
+static double *X = NULL;
 int *peers = NULL;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /****************************************************
                 function declaration
 ****************************************************/
@@ -224,6 +226,7 @@ void *sendInfo(void *arg){
 		memset(message,0,sizeof(message));
 	}
 	printf("END of sendInfo!!!\n");
+        return NULL;
 }
 
 void sendSyncMsg(char* msg) {
@@ -236,7 +239,7 @@ void sendSyncMsg(char* msg) {
 				socketArr[i] = -1;
 			}
 			else {
-				printf("Sent message to server %d: %s\n",i+1,msg);
+				// printf("Sent message to server %d: %s\n",i+1,msg);
 				if(NODE_NUMBER == 0) {
 					ack[i] = 0; // waitting for ack from server (i+1)
 				}
@@ -296,7 +299,9 @@ void *getInfo(void *arg){
 	
 	int sock = -1;
         if(node == 0) {
-            peers = (int *) malloc(nodeAmount*sizeof(int));
+                pthread_mutex_lock(&mutex);
+                peers = (int *) malloc(nodeAmount*sizeof(int));
+                pthread_mutex_unlock(&mutex);
         }
 	if(node == 0)  { sock = sock0; }
 	else { sock = socketArr[node-1]; }
@@ -316,6 +321,7 @@ void *getInfo(void *arg){
 		  } else {
 		  	if(node == 0) {
                                 printf("X received from server %d\n", node);
+                                pthread_mutex_lock(&mutex);
                                 for(int i = 0; i < nodeAmount; i++) {
                                         if(matrix[i] == 0) {
                                                 peers[i] = 1;
@@ -323,17 +329,28 @@ void *getInfo(void *arg){
                                                 peers[i] = 0;
                                         }
                                 }
+                                pthread_mutex_unlock(&mutex);
 				// char* reply = concat(recvbuf,"");
                                 char *reply = prune(recvbuf, NODE_NUMBER);
                                 printf("X exchange\n");
 				sendSyncMsg(reply);
-				// free(reply);
-                                while(checkPeerAck() != 0) {
-                                        usleep(1000);
+                                while(1) {
+                                        pthread_mutex_lock(&mutex);
+                                        if(checkPeerAck() != 0) {
+                                                pthread_mutex_unlock(&mutex);
+                                                usleep(1000);
+                                        } else {
+                                                pthread_mutex_unlock(&mutex);
+                                                break;
+                                        }
                                 }
+				free(reply);
+                                reply = NULL;
                                 printf("%d X received\n", peerCount);
                                 printf("Computing U\n");
-                                snprintf(reply, 20, "%lf", computeU());
+                                char uString[256] = "";
+                                sprintf(uString, "%lf", computeU());
+                                reply = concat(uString, "");
 				if( send(sock,reply,strlen(reply),0) <=0 ) {
 					printf("Cannot send message to server %d!\n",node);
 					sock0 = -1;
@@ -341,12 +358,14 @@ void *getInfo(void *arg){
 				}
 				else {
 					// printf("Replied message to server %d: %s\n",node,reply);	
-                                        printf("Sending U to S0\n");
+                                        printf("Sending U = %s to S0\n", reply);
 				}
 				free(reply);
                         } else {
                                 free(prune(recvbuf, node));
+                                pthread_mutex_lock(&mutex);
                                 peers[node-1] = 1;
+                                pthread_mutex_unlock(&mutex);
                         }
 		  }	
 		}
@@ -357,13 +376,14 @@ void *getInfo(void *arg){
         if(node == 0) {
             free(peers);
         }
+        return NULL;
 }
 
 double computeU(void) {
         double **XTranspose = MatrixTranspose(&X, 1, nodeAmount*13);
         double **result = MatrixMultiply(&K[NODE_NUMBER-1], XTranspose, 1, nodeAmount*13, nodeAmount*13, 1);
-        free(XTranspose);
         double resultVal = result[0][0];
+        free(XTranspose);
         free(result);
         return resultVal;
 }
@@ -395,14 +415,14 @@ void computeX(void) {
         double **temp1 = MatrixMultiply(A, XTranspose, nodeAmount*13, nodeAmount*13, nodeAmount*13, 1);
         double **UTranspose = MatrixTranspose(&U, 1, nodeAmount);
         double **temp2 = MatrixMultiply(B, UTranspose, nodeAmount*13, nodeAmount, nodeAmount, 1);
-        free(XTranspose);
-        free(UTranspose);
         double **XTemp = MatrixAdd(temp1, temp2, nodeAmount*13, 1, nodeAmount*13, 1);
         double **XTempTranspose = MatrixTranspose(XTemp, nodeAmount*13, 1);
         free(XTemp);
         free(X);
         free(temp1);
         free(temp2);
+        free(XTranspose);
+        free(UTranspose);
         X = XTempTranspose[0];
         // printf("Recomputed X Values: \n");
         // for(int i = 0; i < nodeAmount*13; i++) {
@@ -486,6 +506,7 @@ void *syncStart(void *arg) {
 	}
         fclose(xout);
         fclose(uout);
+        return NULL;
 }
 
 int main(int argc, char* argv[]){
