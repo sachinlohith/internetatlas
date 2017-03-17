@@ -12,7 +12,7 @@
 #include <pthread.h>
 
 #define PORT 25080 //port with TCP for server 0 
-#define SLEEP_TIME 10 //sleep time for server 0: 1s
+#define SLEEP_TIME 1 //sleep time for server 0: 1s
 #define START_TIME 1
 #define END_TIME 1200
 #define ERR_EXIT(m) \
@@ -33,6 +33,8 @@ int* ack = NULL;
 int sock0 = -1;
 char* MSG = "\0";
 char* DATA = "This is a data string\0";
+const char* XOut = "x.out";
+const char* UOut = "u.out";
 double **A = NULL;
 double **B = NULL;
 double **K = NULL;
@@ -58,6 +60,13 @@ char *prune(char *recvbuf, int node);
 double **MatrixMultiply(double **A, double **B, int row1, int col1, int row2, int col2);
 double **MatrixAdd(double **A, double **B, int row1, int col1, int row2, int col2);
 double **MatrixTranspose(double **A, int row, int col);
+void writeXOut(FILE **xout, int time);
+void writeUOut(FILE **uout, int time);
+int peerCount = 0;
+
+/****************************************************
+*              function definitions                 *
+****************************************************/
 
 double **MatrixTranspose(double **A, int row, int col) {
         double **result = NULL;
@@ -299,13 +308,14 @@ void *getInfo(void *arg){
 		  break;
 		}
 		else {
-		  printf("Received message from server %d: %s\n",node,recvbuf);
+		  // printf("Received message from server %d: %s\n",node,recvbuf);
 		  
 		  if(NODE_NUMBER == 0) {
 		  	ack[node - 1] = 1; //received ack from server [node]
                         sscanf(recvbuf, "%lf", &U[node-1]);
 		  } else {
 		  	if(node == 0) {
+                                printf("X received from server %d\n", node);
                                 for(int i = 0; i < nodeAmount; i++) {
                                         if(matrix[i] == 0) {
                                                 peers[i] = 1;
@@ -315,11 +325,14 @@ void *getInfo(void *arg){
                                 }
 				// char* reply = concat(recvbuf,"");
                                 char *reply = prune(recvbuf, NODE_NUMBER);
+                                printf("X exchange\n");
 				sendSyncMsg(reply);
 				// free(reply);
                                 while(checkPeerAck() != 0) {
                                         usleep(1000);
                                 }
+                                printf("%d X received\n", peerCount);
+                                printf("Computing U\n");
                                 snprintf(reply, 20, "%lf", computeU());
 				if( send(sock,reply,strlen(reply),0) <=0 ) {
 					printf("Cannot send message to server %d!\n",node);
@@ -327,7 +340,8 @@ void *getInfo(void *arg){
 					break;
 				}
 				else {
-					printf("Replied message to server %d: %s\n",node,reply);	
+					// printf("Replied message to server %d: %s\n",node,reply);	
+                                        printf("Sending U to S0\n");
 				}
 				free(reply);
                         } else {
@@ -390,11 +404,43 @@ void computeX(void) {
         free(temp1);
         free(temp2);
         X = XTempTranspose[0];
-        printf("Recomputed X Values: \n");
+        // printf("Recomputed X Values: \n");
+        // for(int i = 0; i < nodeAmount*13; i++) {
+                // printf("%lf ", X[i]);
+        // }
+        // printf("\n");
+}
+
+void writeXOut(FILE **xout, int time) {
+        char *outString = NULL, xString[50];
+        outString = (char *) malloc(10*sizeof(char));
+        snprintf(outString, 9, "%d", time);
         for(int i = 0; i < nodeAmount*13; i++) {
-                printf("%lf ", X[i]);
+                memset(xString, 0, sizeof(xString));
+                snprintf(xString, 49, "%lf", X[i]);
+                outString = concat(outString, " ");
+                outString = concat(outString, xString);
         }
-        printf("\n");
+        outString = concat(outString, "\n");
+        fputs(outString, *xout);
+        fflush(*xout);
+        free(outString);
+}
+
+void writeUOut(FILE **uout, int time) {
+        char *outString = NULL, uString[50];
+        outString = (char *) malloc(10*sizeof(char));
+        snprintf(outString, 9, "%d", time);
+        for(int i = 0; i < nodeAmount; i++) {
+                memset(uString, 0, sizeof(uString));
+                snprintf(uString, 49, "%lf", U[i]);
+                outString = concat(outString, " ");
+                outString = concat(outString, uString);
+        }
+        outString = concat(outString, "\n");
+        fputs(outString, *uout);
+        fflush(*uout);
+        free(outString);
 }
 
 void *syncStart(void *arg) {
@@ -403,6 +449,9 @@ void *syncStart(void *arg) {
 	char* c = "";
         char* x_vals[nodeAmount*13];
 	int i = 0;
+        FILE *xout = fopen(XOut, "w");
+        FILE *uout = fopen(UOut, "w");
+        sleep(SLEEP_TIME*20);
 	while(t <= END_TIME) {
 		for(i = 0; i < nodeAmount; i++) {
 			ack[i] = 1;
@@ -411,26 +460,32 @@ void *syncStart(void *arg) {
 		snprintf(buff,12,"%d",t++);
                 char *msg = concat(c, buff);
                 for(int i = 0; i < nodeAmount*13; i++) {
-                    x_vals[i] = malloc(20*sizeof(char));
-                    msg = concat(msg, ",");
-                    snprintf(x_vals[i], 20, "%lf", X[i]);
-                    msg = concat(msg, x_vals[i]);
-                    free(x_vals[i]);
-                    x_vals[i] = NULL;
+                        x_vals[i] = malloc(20*sizeof(char));
+                        msg = concat(msg, ",");
+                        snprintf(x_vals[i], 20, "%lf", X[i]);
+                        msg = concat(msg, x_vals[i]);
+                        free(x_vals[i]);
+                        x_vals[i] = NULL;
                 }
-		printf("\nStarting to send sync message [%s] to connected servers...\n",msg);
+		// printf("\nStarting to send sync message [%s] to connected servers...\n",msg);
+                printf("T = %d, Sending X to all Sp\n", t-1);
 		sendSyncMsg(msg);
 		free(msg);
                 msg = NULL;
 		while( checkACK() != 0 ) {
 			usleep(1000);
 		}
+                printf("Received all U's\n");
                 if(t > 2) {
                         computeX();
                 }
-		printf("Received all ACKs of [%d]\nSleeping...\n",t-1);
-		sleep(SLEEP_TIME);
+                writeXOut(&xout, t-1);
+                writeUOut(&uout, t-1);
+		// printf("Received all ACKs of [%d]\nSleeping...\n",t-1);
+                sleep(SLEEP_TIME);
 	}
+        fclose(xout);
+        fclose(uout);
 }
 
 int main(int argc, char* argv[]){
@@ -683,6 +738,8 @@ void getInput(char* fileName) {
 	int k = 0;
 	while(k < nodeAmount) {
 		matrix[k] = ret[NODE_NUMBER-1][k];
+                if(matrix[k] == 1)
+                        peerCount++;
 		k++;
 	}
 
