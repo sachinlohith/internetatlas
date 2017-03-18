@@ -10,6 +10,7 @@
 #include <netdb.h>
 #include <sys/wait.h>
 #include <pthread.h>
+#include <fcntl.h>
 
 #define PORT 25080 //port with TCP for server 0 
 #define SLEEP_TIME 1 //sleep time for server 0: 1s
@@ -39,7 +40,7 @@ double **A = NULL;
 double **B = NULL;
 double **K = NULL;
 double *U = NULL;
-static double *X = NULL;
+double *X = NULL;
 int *peers = NULL;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -65,6 +66,7 @@ double **MatrixTranspose(double **A, int row, int col);
 void writeXOut(FILE **xout, int time);
 void writeUOut(FILE **uout, int time);
 int peerCount = 0;
+void setServerInfo(struct sockaddr_in* servaddr, int port);
 
 /****************************************************
 *              function definitions                 *
@@ -231,20 +233,21 @@ void *sendInfo(void *arg){
 
 void sendSyncMsg(char* msg) {
 	int i = 0;
-	for(i = 0; i < nodeAmount; i++) {
-		int sock = socketArr[i];
-		if(sock >= 0) {
-			if(send(sock,msg,strlen(msg),0)<=0) {
-				printf("Error on sending message to server %d\n",i+1);
-				socketArr[i] = -1;
-			}
-			else {
-				// printf("Sent message to server %d: %s\n",i+1,msg);
-				if(NODE_NUMBER == 0) {
-					ack[i] = 0; // waitting for ack from server (i+1)
-				}
-			}
-		}
+        for(i = 0; i < nodeAmount; i++) {
+                int sock = socketArr[i];
+                int bytesSent = 0;
+                // printf("Sending message %s\n", msg);
+                if(sock >= 0) {
+                        if((bytesSent = send(sock,msg,strlen(msg),0)) <= 0) {
+                                printf("Error `%s` on sending message to server %d; return code = %d, errno = %d\n",strerror(errno), i+1, bytesSent, errno);
+                                socketArr[i] = -1;
+                        } else {
+                                // printf("Sent message to server %d: %s\n",i+1,msg);
+                                if(NODE_NUMBER == 0) {
+                                        ack[i] = 0; // waitting for ack from server (i+1)
+                                }
+                        }
+                }
 	}
 }
 
@@ -285,10 +288,13 @@ char *prune(char *recvbuf, int node) {
         } else {
                 token = strsep(&string, ",");
                 i = (node-1)*13;
-                while((token = strsep(&string, ",")) != NULL) {
+                int j = 0;
+                while((token = strsep(&string, ",")) != NULL && j < 13) {
                         sscanf(token, "%lf", &X[i]);
                         i++;
+                        j++;
                 }
+                printf("%d number of X's\n", j);
                 return NULL;
         }
 }
@@ -306,7 +312,7 @@ void *getInfo(void *arg){
 	if(node == 0)  { sock = sock0; }
 	else { sock = socketArr[node-1]; }
 	
-	char recvbuf[1024] = {0};
+	char recvbuf[10000] = {0};
 	while(1) {
 		if( recv(sock,recvbuf,sizeof(recvbuf),0) <= 0) {
 		  socketArr[node-1] = -1;
@@ -471,7 +477,7 @@ void *syncStart(void *arg) {
 	int i = 0;
         FILE *xout = fopen(XOut, "w");
         FILE *uout = fopen(UOut, "w");
-        sleep(SLEEP_TIME*20);
+        sleep(20);
 	while(t <= END_TIME) {
 		for(i = 0; i < nodeAmount; i++) {
 			ack[i] = 1;
@@ -496,9 +502,7 @@ void *syncStart(void *arg) {
 			usleep(1000);
 		}
                 printf("Received all U's\n");
-                if(t > 2) {
-                        computeX();
-                }
+                computeX();
                 writeXOut(&xout, t-1);
                 writeUOut(&uout, t-1);
 		// printf("Received all ACKs of [%d]\nSleeping...\n",t-1);
@@ -595,9 +599,24 @@ void createListenningSocket(){
 	int yes = 1;
 	char ipstr[INET_ADDRSTRLEN]; // store IP address with digital format
 
-	if((SocketListen = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP))<0)
+	if((SocketListen = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))<0)
                 ERR_EXIT("socket");
 
+        struct timeval timeout;      
+        timeout.tv_sec = 1000;
+        timeout.tv_usec = 0;
+
+        if (setsockopt (SocketListen, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+                perror("setsockopt()");
+
+        if (setsockopt (SocketListen, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+                perror("setsockopt()");
+        // int optval = 1;
+        // socklen_t optlen = sizeof(optval);
+        // if(setsockopt(SocketListen, SOL_SOCKET, SO_KEEPALIVE, &optval, optlen) < 0) {
+        //         close(SocketListen);
+        //         exit(EXIT_FAILURE);
+        // }
         /*Initializing Socket*/
         struct sockaddr_in servaddr; //binding addr 
         memset(&servaddr, 0, sizeof(servaddr));
@@ -629,8 +648,27 @@ void connectToServers(int* matrix, pthread_t* getThread) {
 		/*Initializing Socket*/
         	int sock;
         	//TCP socket
-        	if((sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP))<0)
+        	if((sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))<0)
                 	ERR_EXIT("socket");
+
+                struct timeval timeout;      
+                timeout.tv_sec = 1000;
+                timeout.tv_usec = 0;
+
+                if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+                        perror("setsockopt()");
+
+                if (setsockopt (sock, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+                        perror("setsockopt()");
+
+
+                //int optval = 1;
+                //socklen_t optlen = sizeof(optval);
+                //if(setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &optval, optlen) < 0) {
+                //        perror("setsockopt()");
+                //        close(sock);
+                //        exit(EXIT_FAILURE);
+                //}
 
         	struct sockaddr_in serveraddr; //server addr
 
@@ -663,9 +701,25 @@ void connectToServer0() {
                 /*Initializing Socket*/
                 //int sock;
                 //TCP socket
-                if((sock0 = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP))<0)
+                if((sock0 = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))<0)
                         ERR_EXIT("socket");
+                struct timeval timeout;      
+                timeout.tv_sec = 1000;
+                timeout.tv_usec = 0;
 
+                if (setsockopt (sock0, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+                        perror("setsockopt()");
+
+                if (setsockopt (sock0, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+                        perror("setsockopt()");
+
+                //int optval = 1;
+                //socklen_t optlen = sizeof(optval);
+                //if(setsockopt(sock0, SOL_SOCKET, SO_KEEPALIVE, &optval, optlen) < 0) {
+                //        perror("setsockopt()");
+                //        close(sock0);
+                //        exit(EXIT_FAILURE);
+                //}
                 struct sockaddr_in serveraddr; //server addr
 
                 memset(&serveraddr, 0, sizeof(serveraddr));
