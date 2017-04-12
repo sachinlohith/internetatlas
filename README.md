@@ -2,7 +2,7 @@
 Internet Atlas
 
 # HOW TO
-1. `$ python -m SimpleHTTPServer &`
+1. `$ python -m SimpleHTTPServer &` from `montage` directory
 2. Launch Google Chrome / Firefox / Safari
 3. Goto `localhost:8000/home.html`
 4. Specify any of the parameters of your choice in the web page 
