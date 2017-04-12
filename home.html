@@ -14,12 +14,12 @@
   <body>
     <h3>Internet Atlas</h3>
     <form id="myForm" action="javascript:initMap()">
-        West : <input type=number step=any id="west"> <br>
-        East : <input type=number step=any id="east"> <br>
-        North : <input type=number step=any id="north"> <br>
-        South : <input type=number step=any id="south"> <br>
-        Start : <input type=number id="start"> <br>
-        End : <input type=number id="end"> <br>
+        West : <input type=number step=any id="west"> (Include all co-ordinates to the west of the specified longitude) <br>
+        East : <input type=number step=any id="east"> (Include all co-ordinates to the east of the specified longitude)<br>
+        North : <input type=number step=any id="north"> (Include all co-ordinates to the north of the specified latitude)<br>
+        South : <input type=number step=any id="south"> (Include all co-ordinates to the south of the specified latitude)<br>
+        Start : <input type=number id="start"> (Include all co-ordinates from the specified index)<br>
+        End : <input type=number id="end"> (Include all co-ordinates until the specified index)<br>
         <input type=submit value="Generate MAP"> <br>
     </form>
     <form action="javascript:generateNS()">

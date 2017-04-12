@@ -294,7 +294,6 @@ char *prune(char *recvbuf, int node) {
                         i++;
                         j++;
                 }
-                printf("%d number of X's\n", j);
                 return NULL;
         }
 }
