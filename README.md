@@ -19,4 +19,5 @@
 Internet Atlas is a visualization and analysis portal for diverse Internet measurement data.
 Initial ventures include but are not limited to:
 > R. Durairajan, S. Ghosh, X. Tang, P. Barford, and B. Eriksson. Internet Atlas: A Geographic Database of the Internet. In Proceedings of ACM HotPlanet, 2013.
+
 > R. Durairajan, P. Barford, J.Sommers and W. Willinger. InterTubes: A Study of the US Long-haul Fiber-optic Infrastructure. In Proceedings of ACM SIGCOMM, 2015.
